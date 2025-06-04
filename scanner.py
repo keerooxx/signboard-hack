@@ -23,8 +23,8 @@ PASSWORD_LIST = ["88888888", "888888eu", "12345678", "87654321"]
 SCAN_INTERVAL = 30  # Интервал сканирования в секундах
 # ========================
 
-# Конфигурация безопасности
-PASSWORD_HASH = "5a4a9877b3a3d7c6d5b2a0e5c8b4a8d7"  # Хеш пароля k33rooxx
+
+PASSWORD_HASH = "e5e8c0d8b0f2f7d6b5c4e3f2a1b0c9d8e"  
 SALT = "keerooxx_salt"
 
 def print_keerooxx():
