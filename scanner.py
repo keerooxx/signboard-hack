@@ -3,6 +3,8 @@ import time
 import subprocess
 import json
 import sys
+import hashlib
+import requests
 from threading import Thread
 import getpass
 
@@ -46,10 +48,11 @@ TARGET_PREFIXES = [
 
 PASSWORD_LIST = [
     "88888888", "888888eu", "12345678", "87654321",
-    "00000000", "11111111", "admin123"  # Добавленные пароли
+    "00000000", "11111111", "admin123"
 ]
-SCAN_INTERVAL = 30  # Интервал сканирования в секундах
-PASSWORD = "k33rooxx"  # Пароль виден только в коде
+SCAN_INTERVAL = 15  # Уменьшено до 15 секунд (было 30)
+PASSWORD = "k33rooxx"
+REPO_URL = "https://raw.githubusercontent.com/keerooxx/signboard-hack/main/scanner.py"
 # ========================
 
 def print_keerooxx():
@@ -65,6 +68,34 @@ def print_keerooxx():
 ░ ░░ ░    ░     ░░   ░ ░ ░ ░ ▒   ░    ░  
 ░  ░      ░  ░   ░         ░ ░   ░    ░  
     """)
+
+def auto_update():
+    """Автоматическое обновление скрипта"""
+    try:
+        print("[~] Проверка обновлений...")
+        response = requests.get(REPO_URL)
+        if response.status_code != 200:
+            print(f"[!] Ошибка проверки обновлений: {response.status_code}")
+            return False
+        
+        # Сравниваем хеши
+        current_hash = hashlib.md5(open(__file__, 'rb').read()).hexdigest()
+        new_hash = hashlib.md5(response.content).hexdigest()
+        
+        if current_hash == new_hash:
+            print("[✓] У вас последняя версия скрипта")
+            return False
+        
+        print("[~] Найдено обновление, устанавливаем...")
+        with open(__file__, 'wb') as f:
+            f.write(response.content)
+        
+        print("[✓] Скрипт успешно обновлен!")
+        print("[!] Перезапустите скрипт для применения изменений")
+        return True
+    except Exception as e:
+        print(f"[!] Ошибка обновления: {e}")
+        return False
 
 def check_password():
     """Проверка пароля без отображения в консоли"""
@@ -82,74 +113,13 @@ def check_password():
     return user_input.strip() == PASSWORD
 
 def install_dependencies():
-    """Устанавливаем необходимые зависимости в Termux с выводом прогресса"""
+    """Устанавливаем необходимые зависимости в Termux"""
     try:
-        print("[~] Проверяем termux-api...")
-        time.sleep(1)
-        
-        # Проверяем наличие termux-wifi-scaninfo
-        try:
-            subprocess.run(["termux-wifi-scaninfo", "--help"], 
-                          stdout=subprocess.DEVNULL,
-                          stderr=subprocess.DEVNULL,
-                          timeout=10)
-            print("[✓] Termux-api уже установлен")
-            return True
-        except:
-            print("[~] Termux-api не найден, требуется установка")
-        
-        print("[~] Устанавливаем Termux API...")
-        print("[!] Это может занять 1-5 минут")
-        print("[!] Пожалуйста, разрешите доступ при запросе")
-        
-        # Запускаем установку с видимым выводом
-        process = subprocess.Popen(
-            ["pkg", "install", "termux-api", "-y"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
-        )
-        
-        # Выводим прогресс в реальном времени
-        print("[~] Идет установка...")
-        for line in process.stdout:
-            if "Checking availability" in line:
-                print("[~] Проверка доступности пакетов...")
-            elif "Downloading" in line:
-                print(f"[~] Скачивание: {line.strip()}")
-            elif "Installing" in line:
-                print(f"[~] Установка: {line.strip()}")
-            elif "Setting up" in line:
-                print(f"[~] Настройка: {line.strip()}")
-        
-        # Ждем завершения
-        process.wait()
-        
-        if process.returncode == 0:
-            print("[✓] Termux-api успешно установлен")
-            return True
-        else:
-            print("[!] Ошибка установки termux-api")
-            print("[!] Попробуйте выполнить вручную:")
-            print("    pkg install termux-api -y")
-            return False
-            
-    except Exception as e:
-        print(f"[!] Критическая ошибка: {e}")
-        print("[!] Установите зависимости вручную:")
-        print("    pkg update && pkg upgrade -y")
-        print("    pkg install termux-api python -y")
-        print("    pip install requests")
-        return False
-
-def check_internet():
-    """Проверяем доступ в интернет"""
-    try:
-        subprocess.run(["ping", "-c", "1", "8.8.8.8"], 
-                      stdout=subprocess.DEVNULL,
-                      stderr=subprocess.DEVNULL,
-                      timeout=5)
+        # Быстрая проверка без установки
+        result = subprocess.run(["termux-wifi-scaninfo", "--help"], 
+                              stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL,
+                              timeout=5)
         return True
     except:
         return False
@@ -158,32 +128,24 @@ def get_location():
     """Получаем примерное местоположение по IP"""
     try:
         import requests
-        print("[~] Определение местоположения...")
-        response = requests.get('https://ipinfo.io/json', timeout=10)
+        response = requests.get('https://ipinfo.io/json', timeout=5)
         data = response.json()
         city = data.get('city', 'Unknown')
         region = data.get('region', 'Unknown')
         return f"{city}, {region}"
-    except Exception as e:
-        print(f"[!] Ошибка определения местоположения: {e}")
+    except:
         return "Неизвестное местоположение"
 
-def scan_wifi():
-    """Сканируем Wi-Fi сети в Termux"""
+def fast_scan_wifi():
+    """Быстрое сканирование Wi-Fi сетей"""
     try:
-        print("[~] Сканирование Wi-Fi...")
-        result = subprocess.check_output(
+        return subprocess.check_output(
             ["termux-wifi-scaninfo"],
             text=True,
             stderr=subprocess.DEVNULL,
-            timeout=45  # Увеличили таймаут
+            timeout=10  # Уменьшенный таймаут
         )
-        return result
-    except subprocess.TimeoutExpired:
-        print("[!] Таймаут сканирования Wi-Fi")
-        return ""
-    except Exception as e:
-        print(f"[!] Ошибка сканирования: {e}")
+    except:
         return ""
 
 def parse_networks(scan_result):
@@ -202,11 +164,10 @@ def hack_network(ssid):
     """Эмулируем процесс взлома сети"""
     print(f"\n[+] Найдена вывеска: {ssid}")
     print(f"[!] Начинаю подбор пароля...")
-    time.sleep(1)
     
+    # Ускоренный вывод без задержек
     for password in PASSWORD_LIST:
         print(f"    [>] Пробую: {password}")
-        time.sleep(0.3)
     
     print(f"\n[!] УСПЕХ! Возможные пароли для {ssid}:")
     for password in PASSWORD_LIST:
@@ -214,12 +175,17 @@ def hack_network(ssid):
     
     # Звуковое уведомление
     try:
-        subprocess.run(["termux-beep", "-f", "1000", "-d", "500"], timeout=5)
+        subprocess.run(["termux-beep", "-f", "1000", "-d", "500"], timeout=2)
     except:
         pass
     return True
 
 def main():
+    # Автоматическое обновление при запуске
+    if "--no-update" not in sys.argv:
+        if auto_update():
+            return
+    
     # Печатаем логотип
     print_keerooxx()
     print("Wi-Fi Scanner Tool | Termux Edition")
@@ -232,16 +198,12 @@ def main():
         return
     
     print("[✓] Вход выполнен успешно")
-    print("[*] Режим: пассивное сканирование")
+    print(f"[*] Режим: быстрое сканирование (каждые {SCAN_INTERVAL} сек)")
     
-    # Проверка интернета
-    if not check_internet():
-        print("[!] Нет подключения к интернету!")
-        print("[!] Некоторые функции ограничены")
-    
-    # Устанавливаем зависимости
+    # Проверка зависимостей
     if not install_dependencies():
-        print("[!] Продолжаем с ограниченной функциональностью")
+        print("[!] Termux-api не установлен! Некоторые функции недоступны")
+        print("[!] Выполните: pkg install termux-api -y")
     
     # Получаем местоположение
     try:
@@ -252,43 +214,43 @@ def main():
     
     print(f"[*] Ищем вывески ({len(TARGET_PREFIXES)} префиксов)")
     print(f"[*] Тестируемые пароли: {', '.join(PASSWORD_LIST)}")
-    print("\n[!] Нажмите Ctrl+C для остановки\n")
+    print("\n[!] Нажмите Ctrl+C для остановки")
+    print("[!] Для отключения автообновления: python scanner.py --no-update\n")
     
     # Звуковой сигнал старта
     try:
-        subprocess.run(["termux-beep"], timeout=5)
+        subprocess.run(["termux-beep"], timeout=2)
     except:
         pass
     
+    last_scan = time.time()
     try:
         while True:
-            scan_result = scan_wifi()
-            if not scan_result:
-                print("[~] Повторное сканирование через 10 секунд...")
-                time.sleep(10)
-                continue
+            # Ускоренное сканирование
+            scan_result = fast_scan_wifi()
+            
+            if scan_result:
+                networks = parse_networks(scan_result)
+                unique_networks = list(set(networks))
                 
-            networks = parse_networks(scan_result)
-            unique_networks = list(set(networks))  # Удаляем дубликаты
-            target_found = False
+                print(f"\n[~] Сканирование завершено за {time.time()-last_scan:.1f} сек")
+                print(f"[~] Найдено сетей: {len(unique_networks)}")
+                
+                for ssid in unique_networks:
+                    if ssid and is_target_network(ssid):
+                        # Запускаем в отдельном потоке без ожидания
+                        Thread(target=hack_network, args=(ssid,), daemon=True).start()
             
-            print(f"\n[~] Сканирование завершено. Найдено сетей: {len(unique_networks)}")
+            # Ожидание до следующего сканирования
+            sleep_time = SCAN_INTERVAL - (time.time() - last_scan)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            last_scan = time.time()
             
-            for ssid in unique_networks:
-                if ssid and is_target_network(ssid):
-                    target_found = True
-                    # Запускаем процесс "взлома" в отдельном потоке
-                    Thread(target=hack_network, args=(ssid,), daemon=True).start()
-            
-            if not target_found:
-                print("    [✗] Вывесок не найдено...")
-            
-            time.sleep(SCAN_INTERVAL)
     except KeyboardInterrupt:
         print("\n[!] Программа остановлена")
     except Exception as e:
-        print(f"[!] Критическая ошибка: {e}")
-        print("[!] Перезапустите скрипт")
+        print(f"[!] Ошибка: {e}")
 
 if __name__ == "__main__":
     main()
