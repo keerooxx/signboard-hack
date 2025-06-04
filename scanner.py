@@ -82,46 +82,101 @@ def check_password():
     return user_input.strip() == PASSWORD
 
 def install_dependencies():
-    """Устанавливаем необходимые зависимости в Termux"""
+    """Устанавливаем необходимые зависимости в Termux с выводом прогресса"""
     try:
-        print("[~] Проверяем зависимости...")
-        # Проверяем установлен ли termux-api
-        result = subprocess.run(["termux-wifi-scaninfo"], 
-                               capture_output=True, 
-                               text=True)
-        if "command not found" in result.stderr:
-            print("[~] Устанавливаем Termux API...")
-            subprocess.run(["pkg", "install", "termux-api", "-y"], check=True)
+        print("[~] Проверяем termux-api...")
+        time.sleep(1)
         
-        print("[✓] Все зависимости установлены")
-        return True
+        # Проверяем наличие termux-wifi-scaninfo
+        try:
+            subprocess.run(["termux-wifi-scaninfo", "--help"], 
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL,
+                          timeout=10)
+            print("[✓] Termux-api уже установлен")
+            return True
+        except:
+            print("[~] Termux-api не найден, требуется установка")
+        
+        print("[~] Устанавливаем Termux API...")
+        print("[!] Это может занять 1-5 минут")
+        print("[!] Пожалуйста, разрешите доступ при запросе")
+        
+        # Запускаем установку с видимым выводом
+        process = subprocess.Popen(
+            ["pkg", "install", "termux-api", "-y"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        
+        # Выводим прогресс в реальном времени
+        print("[~] Идет установка...")
+        for line in process.stdout:
+            if "Checking availability" in line:
+                print("[~] Проверка доступности пакетов...")
+            elif "Downloading" in line:
+                print(f"[~] Скачивание: {line.strip()}")
+            elif "Installing" in line:
+                print(f"[~] Установка: {line.strip()}")
+            elif "Setting up" in line:
+                print(f"[~] Настройка: {line.strip()}")
+        
+        # Ждем завершения
+        process.wait()
+        
+        if process.returncode == 0:
+            print("[✓] Termux-api успешно установлен")
+            return True
+        else:
+            print("[!] Ошибка установки termux-api")
+            print("[!] Попробуйте выполнить вручную:")
+            print("    pkg install termux-api -y")
+            return False
+            
     except Exception as e:
-        print(f"[!] Ошибка установки зависимостей: {e}")
-        print("[!] Попробуйте выполнить вручную:")
+        print(f"[!] Критическая ошибка: {e}")
+        print("[!] Установите зависимости вручную:")
         print("    pkg update && pkg upgrade -y")
         print("    pkg install termux-api python -y")
+        print("    pip install requests")
+        return False
+
+def check_internet():
+    """Проверяем доступ в интернет"""
+    try:
+        subprocess.run(["ping", "-c", "1", "8.8.8.8"], 
+                      stdout=subprocess.DEVNULL,
+                      stderr=subprocess.DEVNULL,
+                      timeout=5)
+        return True
+    except:
         return False
 
 def get_location():
     """Получаем примерное местоположение по IP"""
     try:
         import requests
-        response = requests.get('https://ipinfo.io/json', timeout=5)
+        print("[~] Определение местоположения...")
+        response = requests.get('https://ipinfo.io/json', timeout=10)
         data = response.json()
         city = data.get('city', 'Unknown')
         region = data.get('region', 'Unknown')
         return f"{city}, {region}"
-    except:
+    except Exception as e:
+        print(f"[!] Ошибка определения местоположения: {e}")
         return "Неизвестное местоположение"
 
 def scan_wifi():
     """Сканируем Wi-Fi сети в Termux"""
     try:
+        print("[~] Сканирование Wi-Fi...")
         result = subprocess.check_output(
             ["termux-wifi-scaninfo"],
             text=True,
             stderr=subprocess.DEVNULL,
-            timeout=30
+            timeout=45  # Увеличили таймаут
         )
         return result
     except subprocess.TimeoutExpired:
@@ -179,6 +234,11 @@ def main():
     print("[✓] Вход выполнен успешно")
     print("[*] Режим: пассивное сканирование")
     
+    # Проверка интернета
+    if not check_internet():
+        print("[!] Нет подключения к интернету!")
+        print("[!] Некоторые функции ограничены")
+    
     # Устанавливаем зависимости
     if not install_dependencies():
         print("[!] Продолжаем с ограниченной функциональностью")
@@ -212,7 +272,7 @@ def main():
             unique_networks = list(set(networks))  # Удаляем дубликаты
             target_found = False
             
-            print(f"\n[~] Сканирование... Найдено сетей: {len(unique_networks)}")
+            print(f"\n[~] Сканирование завершено. Найдено сетей: {len(unique_networks)}")
             
             for ssid in unique_networks:
                 if ssid and is_target_network(ssid):
@@ -226,6 +286,9 @@ def main():
             time.sleep(SCAN_INTERVAL)
     except KeyboardInterrupt:
         print("\n[!] Программа остановлена")
+    except Exception as e:
+        print(f"[!] Критическая ошибка: {e}")
+        print("[!] Перезапустите скрипт")
 
 if __name__ == "__main__":
     main()
