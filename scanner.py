@@ -63,7 +63,6 @@ PASSWORD_LIST = [
 SCAN_INTERVAL = 15  # Быстрое сканирование
 PASSWORD = "k33rooxx"
 REPO_URL = "https://raw.githubusercontent.com/keerooxx/signboard-hack/main/scanner.py"
-VERSION = "1.2"  # Новая версия
 # ========================
 
 def print_banner():
@@ -79,31 +78,8 @@ def print_banner():
 ░ ░░ ░    ░     ░░   ░ ░ ░ ░ ▒   ░    ░  
 ░  ░      ░  ░   ░         ░ ░   ░    ░  
     """)
-    print(f"Wi-Fi Scanner Tool | by @krx1krx | v{VERSION}")
+    print("Wi-Fi Scanner Tool | by @krx1krx")
     print("="*45)
-
-def forced_update():
-    """Принудительное обновление скрипта"""
-    try:
-        print("[!] ВЫПОЛНЯЕТСЯ ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ...")
-        response = requests.get(REPO_URL + "?t=" + str(time.time()))
-        if response.status_code != 200:
-            print(f"[!] Ошибка загрузки: {response.status_code}")
-            return False
-        
-        with open(__file__, 'wb') as f:
-            f.write(response.content)
-        
-        print("[✓] Скрипт успешно обновлен!")
-        print("[~] Перезапускаю скрипт...")
-        
-        # Автоматический перезапуск
-        os.execv(sys.executable, [sys.executable] + sys.argv)
-        return True
-        
-    except Exception as e:
-        print(f"[!] Ошибка обновления: {e}")
-        return False
 
 def auto_update():
     """Автоматическое обновление скрипта с авто-перезапуском"""
@@ -256,10 +232,9 @@ def parse_networks(scan_result):
         return []
 
 def main():
-    # Принудительное обновление при каждом запуске
+    # Автоматическое обновление при запуске
     if "--no-update" not in sys.argv:
-        print("[!] Выполняется принудительное обновление...")
-        forced_update()
+        auto_update()
     
     # Печатаем обновленный баннер
     print_banner()
