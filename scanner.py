@@ -65,7 +65,7 @@ PASSWORD_LIST = [
 SCAN_INTERVAL = 15  # Быстрое сканирование
 PASSWORD = "k33rooxx"
 REPO_URL = "https://raw.githubusercontent.com/keerooxx/signboard-hack/main/scanner.py"
-VERSION = "1.5"  # Новая версия
+VERSION = "1.6"  # Новая версия
 # ========================
 
 def print_banner():
@@ -249,6 +249,53 @@ def parse_networks(scan_result):
     except:
         return []
 
+def check_termux_api_installed():
+    """Проверка установки Termux API с диагностикой"""
+    required_commands = ["termux-wifi-scan", "termux-wifi-scaninfo", "termux-wifi-connect"]
+    missing = []
+    found = []
+    
+    print("\n[~] Диагностика Termux API:")
+    
+    for cmd in required_commands:
+        path = shutil.which(cmd)
+        if path:
+            print(f"    [✓] {cmd}: найдено в {path}")
+            found.append(cmd)
+        else:
+            print(f"    [✗] {cmd}: не найдено")
+            missing.append(cmd)
+    
+    if not missing:
+        print("[✓] Все необходимые команды найдены")
+        return True
+    
+    print("\n[!] Проблемы обнаружены:")
+    print("    1. Убедитесь, что установлен пакет termux-api:")
+    print("       pkg install termux-api")
+    print("    2. Убедитесь, что установлено приложение Termux:API")
+    print("    3. Проверьте разрешения для Termux:API в настройках Android")
+    print("    4. Перезапустите Termux после установки")
+    
+    # Проверка наличия пакета в системе
+    try:
+        print("\n[~] Проверка установки пакета termux-api...")
+        result = subprocess.run(
+            ["pkg", "show", "termux-api"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5
+        )
+        if "installed: yes" in result.stdout:
+            print("    [✓] Пакет termux-api установлен")
+        else:
+            print("    [✗] Пакет termux-api не установлен")
+    except:
+        print("    [!] Не удалось проверить статус пакета")
+    
+    return False
+
 def main():
     # ТОЛЬКО ПЕРВЫЙ ЗАПУСК: проверка обновлений
     if "--no-update" not in sys.argv and "--restarted" not in sys.argv:
@@ -262,17 +309,10 @@ def main():
     # Печатаем обновленный баннер
     print_banner()
     
-    # Проверка зависимостей
-    required_commands = ["termux-wifi-scan", "termux-wifi-scaninfo", "termux-wifi-connect"]
-    missing = [cmd for cmd in required_commands if not shutil.which(cmd)]
-    
-    if missing:
-        print("[!] Критические ошибки:")
-        for cmd in missing:
-            print(f"    - Команда {cmd} не найдена")
-        print("\n[!] Установите необходимые зависимости:")
-        print("    pkg update && pkg install termux-api")
-        print("[!] И скачайте приложение Termux:API из Play Store")
+    # Проверка зависимостей с диагностикой
+    if not check_termux_api_installed():
+        print("\n[!] Критические ошибки: Termux API не установлен или не настроен правильно")
+        print("[!] Скрипт не может работать без Termux API")
         return
     
     # Проверка пароля
@@ -318,10 +358,11 @@ def main():
                 
                 print(f"\n[~] Сканирование завершено. Сетей: {len(unique_networks)}")
                 
-                # Отображаем первые 5 сетей для тестирования
-                if unique_networks:
-                    print(f"[i] Обнаружены сети: {', '.join(unique_networks[:5])}" + 
-                          ("..." if len(unique_networks) > 5 else ""))
+                # Временная диагностика: выводим все сети
+                print("\n[DEBUG] Все обнаруженные сети:")
+                for i, ssid in enumerate(unique_networks):
+                    target = "ДА" if is_target_network(ssid) else "НЕТ"
+                    print(f"  {i+1}. {ssid} (Целевая: {target})")
                 
                 found_targets = False
                 for ssid in unique_networks:
