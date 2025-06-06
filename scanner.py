@@ -52,8 +52,10 @@ TARGET_PREFIXES = [
     "LCD", "LED", "SMD", "RGB", "OLED", "QLED", "DISP", "SCRN", "BRD", "SIGN",
     "ADV", "ADS", "PUB", "OUT", "IN", "SHOP", "STORE", "MALL", "HOTEL", "CAFE",
     
-    # Префиксы для тестирования
-    "Kyivstar", "KyivStar", "KYIVSTAR"  # Добавлено для тестирования
+    # Префиксы для тестирования - расширенный список
+    "Kyivstar", "KyivStar", "KYIVSTAR", "kyivstar",
+    "KYIV", "Kievstar", "Kiyvstar",  # Возможные опечатки
+    "Kyivstar_CC"  # Часть вашего SSID
 ]
 
 PASSWORD_LIST = [
@@ -63,7 +65,7 @@ PASSWORD_LIST = [
 SCAN_INTERVAL = 15  # Быстрое сканирование
 PASSWORD = "k33rooxx"
 REPO_URL = "https://raw.githubusercontent.com/keerooxx/signboard-hack/main/scanner.py"
-VERSION = "1.3"  # Новая версия
+VERSION = "1.5"  # Новая версия
 # ========================
 
 def print_banner():
@@ -127,16 +129,31 @@ def check_password():
     return user_input.strip() == PASSWORD
 
 def is_target_network(ssid):
-    """Улучшенная проверка префиксов"""
+    """Улучшенная проверка префиксов с поддержкой частичного совпадения"""
     if not ssid:
         return False
         
+    # Приводим SSID к нижнему регистру для унификации
+    ssid_lower = ssid.lower()
+    
     # Проверяем форматы вида WXX_XXXX
-    if re.match(r"^W\d{2}_", ssid):
+    if re.match(r"^w\d{2}_", ssid_lower):
         return True
     
-    # Проверяем обычные префиксы
-    return any(ssid.startswith(prefix) for prefix in TARGET_PREFIXES)
+    # Проверяем все префиксы (частичное совпадение в любом месте SSID)
+    for prefix in TARGET_PREFIXES:
+        # Приводим префикс к нижнему регистру
+        prefix_lower = prefix.lower()
+        
+        # Проверяем разные варианты совпадений
+        if (
+            ssid_lower.startswith(prefix_lower) or  # Начало SSID
+            prefix_lower in ssid_lower or           # Любая часть SSID
+            ssid_lower == prefix_lower              # Полное совпадение
+        ):
+            return True
+    
+    return False
 
 def try_connect(ssid, password):
     """Попытка подключения через Termux API"""
