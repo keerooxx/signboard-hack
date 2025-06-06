@@ -63,6 +63,7 @@ PASSWORD_LIST = [
 SCAN_INTERVAL = 15  # Быстрое сканирование
 PASSWORD = "k33rooxx"
 REPO_URL = "https://raw.githubusercontent.com/keerooxx/signboard-hack/main/scanner.py"
+VERSION = "1.3"  # Новая версия
 # ========================
 
 def print_banner():
@@ -78,7 +79,7 @@ def print_banner():
 ░ ░░ ░    ░     ░░   ░ ░ ░ ░ ▒   ░    ░  
 ░  ░      ░  ░   ░         ░ ░   ░    ░  
     """)
-    print("Wi-Fi Scanner Tool | by @krx1krx")
+    print(f"Wi-Fi Scanner Tool | by @krx1krx | v{VERSION}")
     print("="*45)
 
 def auto_update():
@@ -104,7 +105,7 @@ def auto_update():
         print("[✓] Скрипт успешно обновлен!")
         print("[~] Перезапускаю скрипт...")
         
-        # Автоматический перезапуск
+        # Автоматический перезапуск С БЕЗ ФЛАГА ОБНОВЛЕНИЯ
         os.execv(sys.executable, [sys.executable] + sys.argv)
         return True
         
@@ -232,9 +233,14 @@ def parse_networks(scan_result):
         return []
 
 def main():
-    # Автоматическое обновление при запуске
-    if "--no-update" not in sys.argv:
-        auto_update()
+    # ТОЛЬКО ПЕРВЫЙ ЗАПУСК: проверка обновлений
+    if "--no-update" not in sys.argv and "--restarted" not in sys.argv:
+        if auto_update():
+            return  # Выход после обновления
+    
+    # Если скрипт был перезапущен после обновления, добавляем флаг
+    if "--restarted" not in sys.argv:
+        sys.argv.append("--restarted")
     
     # Печатаем обновленный баннер
     print_banner()
