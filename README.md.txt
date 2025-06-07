@@ -1,12 +1,12 @@
-# Wi-Fi Scanner для вывесок
+# Wi-Fi Scanner для вивісок
 
-Скрипт для автоматического обнаружения Wi-Fi вывесок в Termux
+Скрипт для автоматичного знаходження  Wi-Fi вивісок в Termux
 
 ## Установка
 ```bash
 pkg update -y
 pkg install git python termux-api -y
 pip install requests
-git clone https://github.com/ваш_логин/ваш_репозиторий.git
-cd ваш_репозиторий
+git clone https://github.com/keerooxx/signboard-hack.git
+cd signboard_hack
 python scanner.py
